@@ -1,0 +1,58 @@
+function links=gap_closer(A_time,segmentlists_time,segmentlists,max_interframe_distance,max_gap_closing_distance,xy_pixel_size,z_pixel_size)
+xy_ratio=xy_pixel_size;
+z_ratio=z_pixel_size;
+
+% time matrix
+segment_start_times=cellfun(@(cell_variable) cell_variable(1), segmentlists_time);
+segment_end_times=cellfun(@(cell_variable) cell_variable(end), segmentlists_time);
+segment_start_times_label=cellfun(@(cell_variable) cell_variable(1), segmentlists);
+segment_end_times_label=cellfun(@(cell_variable) cell_variable(end), segmentlists);
+for i=1:numel(segment_start_times)
+    for k=1:numel(segment_end_times)
+        TC(k,i)=(segment_start_times(i)-segment_end_times(k));
+    end
+end
+TC(TC<=0)=Inf;
+TC(TC>max_interframe_distance)=Inf;
+TC(TC<Inf)=0;
+
+% Subpixel centroid extraction in previous frame (t1-1), (xc_t0,yc_t0,zc_t0)
+for i=1:numel(segment_start_times)
+    sub_pixel_localization_matrix_traces_starts(i,:)=[A_time{segment_start_times(i)}(segment_start_times_label(i)).Centroid(2:4)+A_time{segment_start_times(i)}(segment_start_times_label(i)).center];
+end
+xc_t0=xy_ratio.*sub_pixel_localization_matrix_traces_starts(:,1);
+yc_t0=xy_ratio.*sub_pixel_localization_matrix_traces_starts(:,2);
+zc_t0=z_ratio.*sub_pixel_localization_matrix_traces_starts(:,3);
+
+% Subpixel centroid extraction in subsequent frame (t1), (xc_t1,yc_t1,zc_t1)
+for i=1:numel(segment_end_times)
+    sub_pixel_localization_matrix_traces_ends(i,:)=[A_time{segment_end_times(i)}(segment_end_times_label(i)).Centroid(2:4)+A_time{segment_end_times(i)}(segment_end_times_label(i)).center];
+end
+xc_t1=xy_ratio.*sub_pixel_localization_matrix_traces_ends(:,1);
+yc_t1=xy_ratio.*sub_pixel_localization_matrix_traces_ends(:,2);
+zc_t1=z_ratio.*sub_pixel_localization_matrix_traces_ends(:,3);
+
+% cost matrix calculation
+for k = 1:numel(xc_t0)
+    for h = 1:length(xc_t1)
+        calculated_cost=vecnorm([xc_t0(k), yc_t0(k), zc_t0(k)]-[xc_t1(h), yc_t1(h), zc_t1(h)])+TC(h,k);
+        if calculated_cost<max_gap_closing_distance
+            C(h,k) = calculated_cost;
+        else
+            C(h,k) = Inf;
+        end
+    end
+end
+C=C.^2;
+highest_cost=max(C(C~=Inf));
+
+% lowest cost solution
+[links, uR, uC]=matchpairs(single(C),single(highest_cost*1.05));
+
+% add unmatched segments
+[gc,grps]=groupcounts([uR; uC]);
+unmatched=grps(gc==2);
+links=cat(1,links,[unmatched, zeros(numel(unmatched),1)]);
+
+
+

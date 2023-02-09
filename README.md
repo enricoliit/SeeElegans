@@ -1,11 +1,10 @@
 # SeeElegans
-Post-processing of volumetric recordings of C. elegans
 Requirements:
-These scripts run on MATLAB and requires Image Processing Toolbox
+Thi software run on MATLAB and requires Image Processing Toolbox
 It has been tested on MATLAB 9.12 Image Processing Toolbox 11.5
 
 How to use:
-1) run SE_parameter_selection(input_stack, output_folder)
+1) run SE_parameter_selection(input_stack, output_folder) in folder Step1Tracking
    Give as input the image stack (input_stack) and the path to the output folder (output_folder). 
    The stack requires the shape (x,y,z,t). 
 
@@ -19,7 +18,7 @@ How to use:
 	   retain tracks
 	d) the distance maximum gap (in pixels) to link spots based on the preservation of the distances among spots
 
-2) run SE_tracking_step(input_stack, output_folder) 
+2) run SE_tracking_step(input_stack, output_folder) in folder Step1Tracking
    Give as input the image stack (input_stack) and the path to the output folder (output_folder). 
    The stack requires the shape (x,y,z,t). The output folder must contain the files parameter.mat, parameter2.mat, 
    parameter3.mat, and parameter4.mat. 
@@ -28,7 +27,7 @@ How to use:
    neurons_reconstructe_max_2.mat. This will contain the final sets of tracked spots. The function also opens a figure to show
    the resulting tracks and the unfiltered set of signals.
 
-3) run remove_and_add_neurons(input_stack, neurons_reconstructed_max_2.mat, outputfolder, inversion)
+3) run remove_and_add_neurons(input_stack, neurons_reconstructed_max_2.mat, outputfolder, inversion)  in folder Step2Correction
    Give as input the image stack (input_stack), the final set of tracked spots (neurons_reconstructed_max2.mat) 
    and the path to the output folder (outputfolder). You may also set the inversion parameter that inverts the x and y 
    coordinates, useful in case the data come from a different tracking procedure.
@@ -44,7 +43,7 @@ How to use:
    where N is the number of files with that name. So, the file with the highest number is the most recent one. The newly saved
    files will contain a variable called "neurons_verified", indicating that the original set of track has been modified. 
  
-4) run identification_step(input_stack, neurons_cleaned, outputpath, voxel_size)
+4) run identification_step(input_stack, neurons_cleaned, outputpath, voxel_size) in folder Step3Identification
    Give as input the image stack (input_stack), the cleaned set of tracked spots (neurons_cleaned.mat), the path to the output 
    folder (outputfolder) and the voxel size in um as [x, y, z]; if the voxel size is not specified the default value is 
    [0.267 0.267 2].
@@ -66,9 +65,11 @@ How to use:
 
 
 
-Example of use:
+Example of use: the "wholestack.mat" file available at https://figshare.com/articles/media/wholestack_mat/22063073 contains a variable
+called wholestack.mat that represents a calcium imaging 4D recording of a C. elegans with pan-neuronal GCaMP expression. If it is 
+moved in the parent folder of the project the following lines may be run.
 
-Step 1) commands to run the identification step
+Step 1) commands to run the identification step when in ./Step1Tracking folder
 
 	% loading stack
 	load('.\..\wholestack.mat');
@@ -83,7 +84,7 @@ Step 1) commands to run the identification step
 	SE_tracking_step(wholestack, outputpath);
 
 
-Step 2) commands to run the validation step
+Step 2) commands to run the validation step when in ./Step2Correction folder
 
 	% loading stack
 	load('.\..\wholestack.mat');
@@ -99,7 +100,7 @@ Step 2) commands to run the validation step
 
 
 
-Step 3) commands to run the identification step
+Step 3) commands to run the identification step when in ./Step3Identification folder
 
 	% loading stack
 	load('.\..\wholestack.mat');

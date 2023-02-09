@@ -64,10 +64,11 @@ How to use:
 
 
 
-Example of use: the "wholestack.mat" file contains a variable called wholestack.mat that represents a calcium imaging 4D recording of
-a C. elegans with pan-neuronal GCaMP expression.
+Example of use: the "wholestack.mat" file available at https://figshare.com/articles/media/wholestack_mat/22063073 contains a variable
+called wholestack.mat that represents a calcium imaging 4D recording of a C. elegans with pan-neuronal GCaMP expression. If it is 
+moved in the parent folder of the project the following lines may be run.
 
-Step 1) commands to run the identification step
+Step 1) commands to run the identification step when in ./Step1Tracking folder
 
 	% loading stack
 	load('.\..\wholestack.mat');
@@ -82,7 +83,7 @@ Step 1) commands to run the identification step
 	SE_tracking_step(wholestack, outputpath);
 
 
-Step 2) commands to run the validation step
+Step 2) commands to run the validation step when in ./Step2Correction folder
 
 	% loading stack
 	load('.\..\wholestack.mat');
@@ -98,7 +99,7 @@ Step 2) commands to run the validation step
 
 
 
-Step 3) commands to run the identification step
+Step 3) commands to run the identification step when in ./Step3Identification folder
 
 	% loading stack
 	load('.\..\wholestack.mat');

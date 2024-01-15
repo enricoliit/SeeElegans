@@ -1,46 +1,46 @@
 # SeeElegans
 Requirements:
 This software runs on MATLAB and requires the "Image Processing Toolbox"
-It has been tested on MATLAB 9.12 Image Processing Toolbox 11.5
-
-How to use:
-1) run SE_parameter_selection(input_stack, output_folder) in folder Step1Tracking
+It has been tested on MATLAB 9.12 Image Processing Toolbox 11.5  
+  
+How to use:  
+1) run SE_parameter_selection(input_stack, output_folder) in folder Step1Tracking  
    Give as input the image stack (input_stack) and the path to the output folder (output_folder). 
    The stack requires the shape (x,y,z,t). 
 
    A window will open for inspecting the stack and setting the parameters. 
    After running, the output folder will contain 4 files named: parameters.mat, parameters2.mat, parameters3.mat, 
    and parameters4.mat. 
-   The set of parameters includes:
-	a) the size and sigma of the log filter and the intensity threshold of the spots found through log filtering.
-		Here is a description of how these parameters affect the detection performance:
-			- intensity threshold: the intensity determines the minimum intensity required for a pixel to be considered as part of a spot.
-   			- size: the size of the log filter determines the scale of the kernel to detect the spot.
-   			- sigma: the sigma determines the scale of the spots that will be detected.
-	b) the selection of a video crop to test the tracking parameters
-		There are two parameters here:
-			- initial time for cropping
-   			- final time for cropping
-	c) the first tracking step involves the following parameters to control the LAP tracking.
-			- the maximum time gap (in frames): this parameter determines the maximum time difference between two spots that will be considered as part of the same track.
-   			- the maximum distance (in pixels) to link spots:  this parameter determines the maximum distance between two spots in consecutive frames that will be considered as part of the same track.
-   			- the minimum length to retain tracks: the parameter determines the minimum number of detected spots required to retain a track.
-	d) the second tracking step involves the maximum gap distance (in pixels) to link spots based on the preservation of the distances among spots.
-			This parameter discards links between spots if the average distance between the considered spot and the other ones differs more than the maximum gap distance in the consecutive frame.
+   The set of parameters includes:  
+	a) the size and sigma of the log filter and the intensity threshold of the spots found through log filtering.  
+		Here is a description of how these parameters affect the detection performance:  
+			- intensity threshold: the intensity determines the minimum intensity required for a pixel to be considered as part of a spot.  
+   			- size: the size of the log filter determines the scale of the kernel to detect the spot.  
+   			- sigma: the sigma determines the scale of the spots that will be detected.  
+	b) the selection of a video crop to test the tracking parameters  
+		There are two parameters here:  
+			- initial time for cropping  
+   			- final time for cropping  
+	c) the first tracking step involves the following parameters to control the LAP tracking.  
+			- the maximum time gap (in frames): this parameter determines the maximum time difference between two spots that will be considered as part of the same track.  
+   			- the maximum distance (in pixels) to link spots:  this parameter determines the maximum distance between two spots in consecutive frames that will be considered as part of the same track.  
+   			- the minimum length to retain tracks: the parameter determines the minimum number of detected spots required to retain a track.  
+	d) the second tracking step involves the maximum gap distance (in pixels) to link spots based on the preservation of the distances among spots.  
+			This parameter discards links between spots if the average distance between the considered spot and the other ones differs more than the 
+                        maximum gap distance in the consecutive frame.  
 
-3) run SE_tracking_step(input_stack, output_folder) in folder Step1Tracking
-   Give as input the image stack (input_stack) and the path to the output folder (output_folder). 
-   The stack requires the shape (x,y,z,t). The output folder must contain the files parameter.mat, parameter2.mat, 
-   parameter3.mat, and parameter4.mat. 
-   
-   The function will perform the tracking step and output the variable 
-   neurons_reconstructed_max_2.mat. This will contain the final sets of tracked spots. The function also opens a figure to show
-   the resulting tracks and the unfiltered set of signals.
-
-4) run remove_and_add_neurons(input_stack, neurons_reconstructed_max_2.mat, outputfolder, inversion)  in folder Step2Correction
-   Give as input the image stack (input_stack), the final set of tracked spots (neurons_reconstructed_max_2.mat)
-   and the path to the output folder (outputfolder). You may also set the inversion parameter that inverts the x and y 
-   coordinates, useful in case the data come from a different tracking procedure.
+3) run SE_tracking_step(input_stack, output_folder) in folder Step1Tracking  
+   Give as input the image stack (input_stack) and the path to the output folder (output_folder).  
+   The stack requires the shape (x,y,z,t). The output folder must contain the files parameter.mat, parameter2.mat,  
+   parameter3.mat, and parameter4.mat.  
+     
+   The function will perform the tracking step and output the variable  
+   neurons_reconstructed_max_2.mat. This will contain the final sets of tracked spots. The function also opens a figure to show the resulting tracks and the 	 
+   unfiltered set of signals.  
+  
+4) run remove_and_add_neurons(input_stack, neurons_reconstructed_max_2.mat, outputfolder, inversion)  in folder Step2Correction  
+   Give as input the image stack (input_stack), the final set of tracked spots (neurons_reconstructed_max_2.mat) and the path to the output folder (outputfolder). 
+   You may also set the inversion parameter that inverts the x and y coordinates, useful in case the data come from a different tracking procedure.  
    
    The function will open a GUI to inspect the tracking results. A mouse scroll will change the visualized timepoint, 
    while zooming or ctrl+mouse scroll will change the visualized plane. By clicking on a spot, it is possible to visualize the 

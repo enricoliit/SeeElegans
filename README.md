@@ -22,7 +22,7 @@ How to use:
 			- initial time for cropping  
    			- final time for cropping
    
-	c) the first tracking step involves the following parameters to control the LAP tracking.  
+	c) the first tracking step involves the following parameters to control the LAP tracking (for more details about the specific parameters see [1]).  
 			- the maximum time gap (in frames): this parameter determines the maximum time difference between two spots that will be considered as part of the same track.  
    			- the maximum distance (in pixels) to link spots:  this parameter determines the maximum distance between two spots in consecutive frames that will be considered as part of the same track.  
    			- the minimum length to retain tracks: the parameter determines the minimum number of detected spots required to retain a track.
@@ -126,3 +126,6 @@ Step 3) commands to run the identification step when in ./Step3Identification fo
 	% running the identification step
 	identification_step(wholestack, neurons_cleaned, outputpath,[0.267 0.267 2]);
 
+Bibliography:
+[1] Jaqaman K, Loerke D, Mettlen M, Kuwata H, Grinstein S, Schmid SL, et al. Robust single-particle tracking in live-cell time-lapse sequences. Nature methods.
+2008;5(8):695–702.

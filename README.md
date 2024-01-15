@@ -1,17 +1,16 @@
-# SeeElegans
-Requirements:
-This software runs on MATLAB and requires the "Image Processing Toolbox"
+# SeeElegans  
+Requirements:  
+This software runs on MATLAB and requires the "Image Processing Toolbox"  
 It has been tested on MATLAB 9.12 Image Processing Toolbox 11.5  
   
 How to use:  
 1) run SE_parameter_selection(input_stack, output_folder) in folder Step1Tracking  
-   Give as input the image stack (input_stack) and the path to the output folder (output_folder). 
-   The stack requires the shape (x,y,z,t). 
-
-   A window will open for inspecting the stack and setting the parameters. 
-   After running, the output folder will contain 4 files named: parameters.mat, parameters2.mat, parameters3.mat, 
-   and parameters4.mat. 
-   The set of parameters includes:  
+   Give as input the image stack (input_stack) and the path to the output folder (output_folder).  
+   The stack requires the shape (x,y,z,t).  
+  
+   A window will open for inspecting the stack and setting the parameters.  
+   After running, the output folder will contain 4 files named: parameters.mat, parameters2.mat, parameters3.mat, and parameters4.mat. The set of parameters includes:  
+   
 	a) the size and sigma of the log filter and the intensity threshold of the spots found through log filtering.  
 		Here is a description of how these parameters affect the detection performance:  
 			- intensity threshold: the intensity determines the minimum intensity required for a pixel to be considered as part of a spot.  

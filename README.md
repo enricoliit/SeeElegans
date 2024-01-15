@@ -15,15 +15,18 @@ How to use:
 		Here is a description of how these parameters affect the detection performance:  
 			- intensity threshold: the intensity determines the minimum intensity required for a pixel to be considered as part of a spot.  
    			- size: the size of the log filter determines the scale of the kernel to detect the spot.  
-   			- sigma: the sigma determines the scale of the spots that will be detected.  
+   			- sigma: the sigma determines the scale of the spots that will be detected.
+   
 	b) the selection of a video crop to test the tracking parameters  
 		There are two parameters here:  
 			- initial time for cropping  
-   			- final time for cropping  
+   			- final time for cropping
+   
 	c) the first tracking step involves the following parameters to control the LAP tracking.  
 			- the maximum time gap (in frames): this parameter determines the maximum time difference between two spots that will be considered as part of the same track.  
    			- the maximum distance (in pixels) to link spots:  this parameter determines the maximum distance between two spots in consecutive frames that will be considered as part of the same track.  
-   			- the minimum length to retain tracks: the parameter determines the minimum number of detected spots required to retain a track.  
+   			- the minimum length to retain tracks: the parameter determines the minimum number of detected spots required to retain a track.
+   
 	d) the second tracking step involves the maximum gap distance (in pixels) to link spots based on the preservation of the distances among spots.  
 			This parameter discards links between spots if the average distance between the considered spot and the other ones differs more than the 
                         maximum gap distance in the consecutive frame.  

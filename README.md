@@ -1,4 +1,8 @@
 # SeeElegans  
+
+For detailed information and insights about this software, please refer to our accompanying article "See Elegans: simple-to-use, accurate, and automatic 3D
+detection of neural activity from densely packed neurons".
+
 Requirements:  
 This software runs on MATLAB and requires the "Image Processing Toolbox"  
 It has been tested on MATLAB 9.12 Image Processing Toolbox 11.5  

@@ -5,7 +5,4 @@ load('.\..\wholestack.mat');
 outputpath='.\..\output\';
 
 % running parameter selection step
-SE_parameter_selection(wholestack, outputpath);
-
-% running tracking step
-SE_tracking_step(wholestack, outputpath);
+SE_parameter_selection(wholestack, outputpath, [0.267 0.267 2]);

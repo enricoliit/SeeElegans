@@ -7,7 +7,7 @@ origin_id=1;
 for i=2:numel(links)                   
     origin_id=1;
     traces_id=numel(segmentlists)+1;
-    while ~isempty(links{i}) && sum(~isnan(links{i}(:,1)))~=0  % ricerca tracce singole dal punto temporale i
+    while ~isempty(links{i}) && sum(~isnan(links{i}(:,1)))~=0
         origin=links{i}(origin_id,1);
         if isnan(origin)
             origin_id=origin_id+1;

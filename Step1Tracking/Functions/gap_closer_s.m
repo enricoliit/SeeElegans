@@ -1,9 +1,7 @@
-function links=gap_closer_s(segmentlists_time,segmentlists,max_interframe_distance,max_gap_closing_distance,A_time_s)
-global xy_pixel_size
-global z_pixel_size
+function links=gap_closer_s(segmentlists_time,segmentlists,max_interframe_distance,max_gap_closing_distance,spots_s,voxel_size)
 
-xy_ratio=xy_pixel_size;
-z_ratio=z_pixel_size;
+xy_ratio=voxel_size(1);
+z_ratio=voxel_size(3);
 
 % time matrix
 segment_start_times=cellfun(@(cell_variable) cell_variable(1), segmentlists_time);
@@ -21,24 +19,24 @@ TC(TC<Inf)=0;
 
 % Subpixel centroid extraction in previous frame (t1-1), (xc_t0,yc_t0,zc_t0)
 for i=1:numel(segment_start_times)
-    sub_pixel_localization_matrix_traces_starts(i,:)=[A_time_s{segment_start_times(i)}(segment_start_times_label(i)).center];
+    sub_pixel_localization_matrix_traces_starts(i,:)=spots_s{segment_start_times(i)}(segment_start_times_label(i),1:3);
 end
-xc_t0=xy_ratio.*sub_pixel_localization_matrix_traces_starts(:,1);
-yc_t0=xy_ratio.*sub_pixel_localization_matrix_traces_starts(:,2);
-zc_t0=z_ratio.*sub_pixel_localization_matrix_traces_starts(:,3);
+xc_t0=xy_ratio .* sub_pixel_localization_matrix_traces_starts(:,1);
+yc_t0=xy_ratio .* sub_pixel_localization_matrix_traces_starts(:,2);
+zc_t0=z_ratio .* sub_pixel_localization_matrix_traces_starts(:,3);
 
 for i=1:numel(segment_end_times)
-    sub_pixel_localization_matrix_traces_ends(i,:)=[A_time_s{segment_end_times(i)}(segment_end_times_label(i)).center];
+    sub_pixel_localization_matrix_traces_ends(i,:)=spots_s{segment_end_times(i)}(segment_end_times_label(i),1:3);
 end
-xc_t1=xy_ratio.*sub_pixel_localization_matrix_traces_ends(:,1);
-yc_t1=xy_ratio.*sub_pixel_localization_matrix_traces_ends(:,2);
-zc_t1=z_ratio.*sub_pixel_localization_matrix_traces_ends(:,3);
+xc_t1=xy_ratio .* sub_pixel_localization_matrix_traces_ends(:,1);
+yc_t1=xy_ratio .* sub_pixel_localization_matrix_traces_ends(:,2);
+zc_t1=z_ratio .* sub_pixel_localization_matrix_traces_ends(:,3);
 
 % cost matrix calculation
 for k = 1:numel(xc_t0)
     for h = 1:length(xc_t1)
         calculated_cost=vecnorm([xc_t0(k), yc_t0(k), zc_t0(k)]-[xc_t1(h), yc_t1(h), zc_t1(h)])+TC(h,k);
-        if calculated_cost<max_gap_closing_distance
+        if calculated_cost < max_gap_closing_distance
             C(h,k) = calculated_cost;
         else
             C(h,k) = Inf;
@@ -59,6 +57,3 @@ end
 [gc,grps]=groupcounts([uR; uC]);
 unmatched=grps(gc==2);
 links=cat(1,links,[unmatched, zeros(numel(unmatched),1)]);
-
-
-

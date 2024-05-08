@@ -9,7 +9,7 @@ for tracklist_id=1:numel(tracklist)
         end_time=(segmentlists_time{segment_id}(end));
         new_track(start_time:end_time)=segmentlists{segment_id};
     end
-    if sum(~isnan(new_track))<length_filter
+    if sum(~isnan(new_track)) < length_filter
         continue
     end    
     filtered_exptracelist{fet}=new_track;

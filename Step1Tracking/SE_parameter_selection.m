@@ -1,420 +1,704 @@
-function SE_parameter_selection(wholestack, outputpath)
-% thi function opens a GUI to choose tracking parameters to track neurons
-% in 4D calcium imaging recordings. 
-% The inputs are:
-%       - wholestack: Stacked recording as a matrix with shape (x,y,z,t)
-%
-%       - outputpath: folder path, specified as a character vector or 
-%                     string scalar. If the folder does not exist, it will
-%                     be created
-%
-% Example: SE_parameter_selection(wholestack, outputpath)
-%       - wholestack = wholestack;
-%       - outputpath = './output';
+function parameter_selection_and_tracking(data, outputpath, voxel_size)
 
+% tasto deseleziona tutto
+% tasto per la scala dei colori nel video
+% tasto luminosità
+% deve lasciare un simbolo nel punto in cui tracki
+% se i primi vicini sono troppo lontani non deve considerarli
+% se passi col mouse su una traccia sarebbe carino vederla nel tempo
 
-%% Initialization
+% MANCA ZSIZES LOCAL, LO METTO O NO?
+% NON HO MESSO I PARAMETRI DELLO STEP 1, PRIMO PANNELLO DIPENDENTI DALLA
+% VOXEL SIZE. 
+
+% Parameter initialization ------------------------------------------------
 addpath('./Functions/');
+stack_initialization();
 
-% initial parameters
-global xy_pixel_size; global z_pixel_size
-
-% parameters to be chosen
-global thresholds; global sizes; global zsizes; global sigmas; global time_processing
-
-% visualization
-global framenum; global I; global slice; global ax
-global wholestack; global video_length
-global number_of_planes
-
-% on screen text
-global text_threshold; global text_size; global text_sigma; global text_timepoint;
-global text_slice; global text_spot_num;
-
-% selected parameters
-global maxtime;
-global non_linking_cost
-global max_gap_closing_distance
-global max_interframe_distance
-global length_filter
-global max_gap_closing_mutual_distance
-
-% initial definitions
-xy_pixel_size=1;
-z_pixel_size=2.*xy_pixel_size;
-
-% initial varaibles
-thresholds=200; sizes=12; zsizes=3; sigmas=3; framenum=500; slice=1; time_processing=1;
-
-disp(outputpath)
-if ~exist(outputpath, 'dir')
-    mkdir(outputpath)
+% GUI
+zmax=size(data,3);
+tmax=size(data,4);
+tmax_local=[];
+z=1;
+t=1;
+menu_control=1;
+if nargin<3 || numel(voxel_size)<3
+    voxel_size=[0.267 0.267 2];
 end
-number_of_planes=size(wholestack,3);
-video_length=size(wholestack,4);
-maxtime=video_length;
-audio=0;
+zratio=voxel_size(3)/voxel_size(1);
+factor = 10;
 
-%% Step 0.0: visualization and segmentation parameter selection
-disp('Starting...')
-global go;
-f=figure('Units','normalized','Position',[0.125 0.125 0.75 0.75]);
-set(f, 'MenuBar', 'none');
-ax=axes(f,'Position',[0.05 0.2 0.9 0.8]);
-framenum(framenum>video_length)=video_length;
-I=wholestack(:,:,slice,framenum)-mean(mean(wholestack(1:38,1:38,slice,framenum)));
-imagesc(I), axis equal, axis off
-% slider range definition
-min_threshold=2; max_threshold=max(wholestack(:)); thresholdrange=max_threshold-min_threshold;
-minsize=2; maxsize=25; sizerange=maxsize-minsize;
-minsigma=1; maxsigma=150; sigmarange=maxsigma-minsigma;
-mintime=1; maxtime=video_length; timerange=maxtime-mintime;
-minslice=1; maxslice=number_of_planes; slicerange=maxslice-minslice; slicerange(slicerange==0)=1;
+% Parameters 1
+thresholds=200;
+zsizes=3;
+sigmas=0.75;
+sizes=2 * ceil(3 * sigmas) + 1;
 
-
-guiapp.sld_threshold = uicontrol('parent',f,'Style','slider','SliderStep',[1 25]./1000,'Value',thresholds,'min',min_threshold,'max',max_threshold,'Position',[50 10 150 25]);
-guiapp.sld_size = uicontrol('parent',f,'Style','slider','Value',sizes,'min',minsize,'max',maxsize,'SliderStep',[1 5]./sizerange,'Position',[250 10 150 25]);
-guiapp.sld_sigma = uicontrol('parent',f,'Style','slider','Value',sigmas,'min',minsigma,'max',maxsigma,'SliderStep',[1 5]./sigmarange,'Position',[450 10 150 25]);
-guiapp.sld_timepoint= uicontrol('parent',f,'Style','slider','Value',framenum,'min',mintime,'max',maxtime,'SliderStep',[1 5]./timerange,'Units','normalized','Position',[0.05 0.1525 0.9 0.025]);
-guiapp.sld_slice= uicontrol('parent',f,'Style','slider','Value',slice,'min',minslice,'max',maxslice,'SliderStep',[1 5]./slicerange,'Units','normalized','Position',[0.05 0.1275 0.9 0.025]);
-guiapp.sld_time_processing = uicontrol('parent',f,'Style','checkbox','String','framenum processing','Value',1,'Position',[850 10 150 25]);
-text_threshold = uicontrol('parent',f,'Style','text','string',['threshold = ' num2str(thresholds)],'Position',[50 35 150 25]);
-text_size = uicontrol('parent',f,'Style','text','string',['size = ' num2str(sizes)],'Position',[250 35 150 25]);
-text_sigma = uicontrol('parent',f,'Style','text','string',['sigma = ' num2str(sigmas)],'Position',[450 35 150 25]);
-text_timepoint = uicontrol('parent',f,'Style','text','string',['framenum = ' num2str(framenum)],'Position',[650 35 150 25]);
-text_slice = uicontrol('parent',f,'Style','text','string',['slice = ' num2str(slice)],'Position',[650 10 150 25]);
-text_spot_num = uicontrol('parent',f,'Style','text','string',['spot number = ' num2str(0)],'Position',[650 60 150 25]);
-
-set(guiapp.sld_threshold,'Callback','global thresholds; thresholds=guiapp.sld_threshold.Value; sliderMoving_spotsthresh;');
-set(guiapp.sld_size,'Callback','global sizes; sizes=guiapp.sld_size.Value; sliderMoving_spotsthresh;');
-set(guiapp.sld_sigma,'Callback','global sigmas; sigmas=guiapp.sld_sigma.Value; sliderMoving_spotsthresh;');
-set(guiapp.sld_time_processing,'Callback', 'global time_processing; time_processing=time_processing-1; sliderMoving_spotsthresh;');
-set(guiapp.sld_timepoint,'Callback','global framenum; framenum=round(guiapp.sld_timepoint.Value); sliderMoving_spotsthresh;');
-set(guiapp.sld_slice,'Callback','global slice; slice=guiapp.sld_slice.Value; sliderMoving_spotsthresh;');
-guiapp.bttn_go= uicontrol('parent',f,'Style','pushbutton','String','GO!','Value',0,'Units','normalized','Position',[0.95 0.0475 0.04 0.05],'Callback','global go; go=1;');
-go=0;
-colormap('gray')
-drawnow
-
-if ~isfile([outputpath '\parameters.mat'])
-    while go==0
-        drawnow
-    end
-    save([outputpath '\parameters.mat'],'thresholds','sizes','sigmas','zsizes','time_processing','-v7.3');
-else
-    load([outputpath '\parameters.mat'])
-end
-structfun(@delete,guiapp);
-
-%% Step 0.1: visualization and subvideo cropping
-
-global parameters
-global texts
-global go;
-global check;
+% Parameters 2
+data_s=[];
 parameters.first_frame=1;
-parameters.last_frame=maxtime;
-guiapp.first_frame = uicontrol('parent',f,'Style','pushbutton','Value',1,'Position',[1050 60 125 25],'String','Start Frame');
-guiapp.last_frame = uicontrol('parent',f,'Style','pushbutton','Value',550,'Position',[1050 30 125 25],'String','End Frame');
-texts.first_frame = uicontrol('parent',f,'Style','text','string',['first frame = ' num2str(parameters.first_frame)],'Position',[1175 60 175 25]);
-texts.last_frame = uicontrol('parent',f,'Style','text','string',['last frame = ' num2str(parameters.last_frame)],'Position',[1175 30 175 25]);
-set(guiapp.first_frame,'Callback','global parameters; global texts; global framenum; guiapp.first_frame.Value=framenum; parameters.first_frame=guiapp.first_frame.Value; set(texts.first_frame,"string",["first frame = " num2str(parameters.first_frame)]);');
-set(guiapp.last_frame,'Callback','global parameters; global texts; global framenum; guiapp.last_frame.Value=framenum; parameters.last_frame=guiapp.last_frame.Value; set(texts.last_frame,"string",["first frame = " num2str(parameters.last_frame)]);');
-guiapp.sld_timepoint= uicontrol('parent',f,'Style','slider','Value',framenum,'min',mintime,'max',maxtime,'SliderStep',[1 5]./timerange,'Units','normalized','Position',[0.05 0.1525 0.9 0.025]);
-guiapp.sld_slice= uicontrol('parent',f,'Style','slider','Value',slice,'min',minslice,'max',maxslice,'SliderStep',[1 5]./slicerange,'Units','normalized','Position',[0.05 0.1275 0.9 0.025]);
-set(guiapp.sld_timepoint,'Callback','global framenum; framenum=round(guiapp.sld_timepoint.Value); sliderMoving_spotsthresh;');
-set(guiapp.sld_slice,'Callback','global slice; slice=guiapp.sld_slice.Value; sliderMoving_spotsthresh;');
-guiapp.bttn_go= uicontrol('parent',f,'Style','pushbutton','String','GO!','Value',0,'Units','normalized','Position',[0.95 0.0475 0.04 0.05],'Callback','global go; go=1;');
-go=0;
-global wholestack_s
-if ~isfile([outputpath '\parameters2.mat'])
-    while go==0
-        drawnow
-    end
-    disp(['Evaluating from ' num2str(parameters.first_frame) ' to ' num2str(parameters.last_frame) '...']);
-    wholestack_s=wholestack(:,:,:,parameters.first_frame:parameters.last_frame);
-    save([outputpath '\parameters2.mat'],'parameters','-v7.3');
-else
-    load([outputpath '\parameters2.mat']);
-end
-wholestack_s=wholestack(:,:,:,parameters.first_frame:parameters.last_frame);
-structfun(@delete,guiapp);
-structfun(@delete,texts);
+parameters.last_frame=round(tmax/10);
 
-%% Step 1: finding spots (LoG filtering and thresholding) in subvideo
-global NUMERO_PIANI_s
-global DURATA_TOTALE_s
-global maxtime_s
-global wholestack_s
-global A_time_s
-global xy_pixel_size; global z_pixel_size
-global thresholds; global sizes; global zsizes; global sigmas;
-NUMERO_PIANI_s=size(wholestack_s,3);
-DURATA_TOTALE_s=size(wholestack_s,4);
-maxtime_s=DURATA_TOTALE_s;
-local_maxtime=maxtime_s;
-sizes_local=sizes;
-thresholds_local=thresholds;
-sigmas_local=sigmas;
-zsizes_local=zsizes;
-if ~isfile([outputpath '\A_time_s.mat']) || ~exist('A_time_s','var')
-    tic
-    % finding spots -----------
-    disp('Step 1.1: finding spots')
-    spots_s{local_maxtime}=[];
-    h = waitbar(0, 'Finding spots ...');
-    for framenum_id=1:local_maxtime
-        spots_s{framenum_id}=bd3d_t_local_s(wholestack_s(:,:,:,framenum_id),sizes_local,thresholds_local,sigmas_local,zsizes_local);
-        waitbar(framenum_id/local_maxtime,h);
-    end
-    close(h)
-    elapsed_time_step_1=toc;
-    A_time_s=spots_s;
-    disp(['computation time: ' num2str(elapsed_time_step_1)]);
-    save([outputpath '\A_time_s.mat'],'A_time_s');
-else
-    if ~exist('A_time_s','var')
-        load([outputpath '\A_time_s.mat'],'A_time_s');
-    end
-end
-
-%% Choosing tracking parameters to be checked in subvideo
-global shown_fig
-global ax
-clear global plotted_neurons
-try
-    figure(f)
-catch
-    f=figure('Units','normalized','Position',[0.125 0.125 0.75 0.75]);
-end
-% set(f, 'MenuBar', 'none');
-ax=axes(f,'Position',[0.05 0.2 0.9 0.8]);
-framenum(framenum>DURATA_TOTALE_s)=DURATA_TOTALE_s;
-I=wholestack_s(:,:,slice,framenum)-mean(mean(wholestack_s(1:38,1:38,slice,framenum)));
-shown_fig=imagesc(I); axis equal, axis off
-check=0;
-go=0;
-non_linking_cost=5;
-max_gap_closing_distance=5;
+% Parameters 3
+spots_s{1}=[];
+non_linking_cost=1;
+max_gap_closing_distance=1;
 max_interframe_distance=2;
 length_filter=1;
-dx_texts=200;
-if ~isfile([outputpath '\parameters3.mat'])
-    while check==0 && go==0
-        % LAP tracking: spot linking
-        clear spot_links_s filtered_exptracelist_s
-        A_time_local=A_time_s; xy_pixel_size_local=xy_pixel_size; z_pixel_size_local=z_pixel_size; spot_links_s{maxtime_s}=[];
+coords_t=[];
+coords_colors=[];
+
+% Parameters 4
+coords_t2=[];
+coords_colors_2=[];
+neurons_bv=[];
+max_gap_closing_mutual_distance=2;
+
+% Create a figure window
+fig = figure('visible','off');
+
+FontSize_factor=2;
+current_size=get(fig, 'position');
+guiapp.control_panel=uipanel('Parent',fig,'Units','normalized','Position',[0 0.2 1 0.15],'BorderType','none');
+
+% Create axes to display image
+guiapp.img_ax = axes('Parent', fig, 'Position', [0.1 0.3 0.8 0.6]);
+guiapp.img_slice = imagesc(data(:,:,z,t));
+set(guiapp.img_ax,'Units','pixels')
+currently_displayed_pxsz=diff(guiapp.img_ax.XLim)/guiapp.img_ax.Position(3);
+set(guiapp.img_ax,'Units','normalized')
+
+hold(guiapp.img_ax,'on');
+scale_shift=5;
+displayed_scale=10;
+scl_x=[0 displayed_scale/voxel_size(1)]+scale_shift;
+scl_y=[0 0]+scale_shift;
+text(mean(scl_x),mean(scl_y)+8,[num2str(displayed_scale) ' \mum'],'Color','w','Interpreter','tex','HorizontalAlignment','center','FontSize',9);
+guiapp.scalebar = plot(scl_x,scl_y,'Color','w','LineWidth',2); 
+hold(guiapp.img_ax,'on');
+guiapp.scatter_plot = scatter(NaN,NaN,NaN);
+hold(guiapp.img_ax,'on');
+guiapp.track_plot = scatter(NaN,NaN,NaN);
+update_spots=@update_spots_step_1_and_2;
+update_image=@update_image_t;
+axis equal
+axis off
+colormap(gray);
+
+% Create sliders for changing the Z and t dimensions
+guiapp.zSlider = uicontrol('Parent', fig, 'units', 'normalized', 'Style', 'slider', 'Min', 1, 'Max', zmax, 'Value', z, ...
+    'SliderStep', [1/(zmax-1) 5/(zmax-1)], 'Position', [0.2 0.01 0.6 0.04], 'Callback', @zSlider_callback);
+guiapp.tSlider = uicontrol('Parent', fig, 'units', 'normalized', 'Style', 'slider', 'Min', 1, 'Max', tmax, 'Value', t, ...
+    'SliderStep', [1/(tmax-1) 5/(tmax-1)], 'Position', [0.2 0.05 0.6 0.04], 'Callback', @tSlider_callback);
+
+% Create text boxes to display the current Z, t, and number of spot
+guiapp.zValue = uicontrol('Parent', fig, 'Style', 'text', 'String', ['z: ' num2str(get(guiapp.zSlider, 'Value'))], ...
+    'units', 'normalized', 'Position', [0.8 0.01 0.05 0.04],'HorizontalAlignment','left');
+guiapp.tValue = uicontrol('Parent', fig, 'Style', 'text', 'String', ['t: ' num2str(get(guiapp.tSlider, 'Value'))], ...
+    'units', 'normalized', 'Position', [0.8 0.05 0.08 0.04],'HorizontalAlignment','left');
+% Advance
+guiapp.advance_button = uicontrol('Parent', fig, 'Style', 'pushbutton', 'String', char(8594), ... % right arrow
+    'Units', 'normalized', 'Position', [0.94 0.0 0.06 0.05], 'visible', 'off', 'Callback', @next_menu);
+guiapp.goback_button = uicontrol('Parent', fig, 'Style', 'pushbutton', 'String', char(8592), ... % right arrow
+    'Units', 'normalized', 'Position', [0.88 0.0 0.06 0.05], 'visible', 'off', 'Callback', @previous_menu);
+% Save
+guiapp.save_parameters = uicontrol('Parent', fig, 'Style', 'pushbutton', 'String', 'save', ...
+    'Units', 'normalized', 'Position', [0.88 0.05 0.12 0.05]);
+
+set(fig, 'visible','on');
+set(fig, 'WindowScrollWheelFcn', @mouse_scroll_callback_t);
+set(fig, 'WindowKeyPressFcn', @keypress_callback);
+set(fig, 'WindowKeyReleaseFcn', @keyrelease_callback);
+set(fig, 'SizeChangedFcn', @resize_text_function);
+addlistener(guiapp.img_ax,'XLim','PostSet',@resize_spots_function);
+
+% Set Menu COntrols--------------------------------------------------------
+setmenu();
+resize_text_function();
+
+% Functions ---------------------------------------------------------------
+    function stack_initialization
+        data=single(data);
+        if size(data,1)>size(data,2)
+            data=single(permute(data,[2 1 3 4]));
+        end
+    end
+
+    % Mouse behaviour
+    
+    function keypress_callback(~, event)
+        if strcmp(event.Key, 'control')
+            set(fig, 'WindowScrollWheelFcn', @mouse_scroll_callback_z);
+        end
+    end
+    
+    function keyrelease_callback(~, event)
+        if strcmp(event.Key, 'control')
+            set(fig, 'WindowScrollWheelFcn', @mouse_scroll_callback_t);
+        end
+    end
+    
+    function mouse_scroll_callback_z(~, event)
+        z = z + event.VerticalScrollCount;
+        z = max(min(z, zmax), 1);
+        guiapp.zSlider.Value = z;
+        guiapp.zValue.String = sprintf('z: %d', z);
+        update_image();
+    end
+    
+    function mouse_scroll_callback_t(~, event)
+        t = t + round(10.*event.VerticalScrollCount);
+        t = max(min(t, guiapp.tSlider.Max), 1);
+        guiapp.tSlider.Value = t;
+        guiapp.tValue.String = sprintf('t: %d', t);
+        update_image();
+    end
+
+    
+    % Callback functions for the buttons and sliders
+    
+    function zSlider_callback(source, ~)
+        z = round(get(source, 'Value'));
+        guiapp.zValue.String = sprintf('z: %d', z);
+        update_image();
+    end
+    
+    function tSlider_callback(source, ~)
+        t = round(get(source, 'Value'));
+        guiapp.tValue.String = sprintf('t: %d', t);
+        update_image();
+    end
+
+    % Callback functions for resizing
+    
+    function resize_text_function(~,~)
+        new_size=get(fig,'Position');
+        [~, changed_dim]=min(new_size(3:4));
+        FontSize_factor=10*new_size(2+changed_dim)./current_size(2+changed_dim);
+        textObjs = findobj(fig, '-property', 'FontSize');
+        for i=1:numel(textObjs)
+            set(textObjs(i),'FontSize',FontSize_factor);
+        end
+        resize_spots_function();
+    end
+
+    function resize_spots_function(~,~)
+        set(guiapp.img_ax,'Units','pixels')
+        new_displayed_pxsz=guiapp.img_ax.Position(3)/diff(guiapp.img_ax.XLim);
+        set(guiapp.img_ax,'Units','normalized');
+        factor=factor*new_displayed_pxsz/(currently_displayed_pxsz);
+        try
+            update_spots();
+        end
+        currently_displayed_pxsz=new_displayed_pxsz;
+    end
+
+    % Functions for data display
+
+    function update_image_t
+        set(guiapp.img_slice,'CData',(data(:,:,z,t)));
+        drawnow
+        update_spots();
+    end
+
+    function update_image_s
+        set(guiapp.img_slice,'CData',(data_s(:,:,z,t)));
+        drawnow
+        update_spots();
+    end
+
+    function update_spots_step_1_and_2(~,~)
+        delete(guiapp.scatter_plot)
+        if guiapp.step(1).show_spots_check.Value==1
+            spots=bd3d(data(:,:,:,t),thresholds,sizes,zsizes,sigmas,voxel_size);
+            guiapp.scatter_plot=plotspots(guiapp.img_ax, guiapp.scatter_plot, spots, sizes, z, zratio, factor);
+            guiapp.step(1).set_spotnum_text.String=sprintf('%d',size(spots,1));
+        end
+    end
+
+    function update_spots_step_3(~,~)
+        delete(guiapp.scatter_plot)
+        current_coords=squeeze(coords_t(t,:,:))';
+        guiapp.scatter_plot=plotspots(guiapp.img_ax, guiapp.scatter_plot, current_coords, sizes, z, zratio, factor, coords_colors);
+        zmarker=abs(squeeze(coords_t(t,3,:))-z);
+        set(guiapp.track_plot,'LineWidth',0.8);
+        set(guiapp.track_plot(zmarker<2),'LineWidth',1.2);
+        set(guiapp.track_plot(zmarker<1),'LineWidth',2.2);
+
+        guiapp.step(3).set_spotnum_text.String=sprintf('%d',size(spots_s{t},1));
+    end
+
+    function update_spots_step_4(~,~)
+        delete(guiapp.scatter_plot)
+        current_coords=squeeze(coords_t2(t,:,:))';
+        guiapp.scatter_plot=plotspots(guiapp.img_ax, guiapp.scatter_plot, current_coords, sizes, z, zratio, factor, coords_colors_2);
+        zmarker=abs(squeeze(coords_t2(t,3,:))-z);
+        set(guiapp.track_plot,'LineWidth',0.8);
+        set(guiapp.track_plot(zmarker<2),'LineWidth',1.2);
+        set(guiapp.track_plot(zmarker<1),'LineWidth',2.2);
+
+        guiapp.step(4).set_spotnum_text.String=sprintf('%d',size(spots_s{t},1));
+    end
+
+    
+    % Functions to control behaviour of menu
+
+    function overwrite_answer=overwrite_request(overwriting_path)
+        overwriting_path=strrep(overwriting_path,'\','/');
+        overwriting_path=strrep(overwriting_path,'//','/');
+        overwrite_answer=questdlg(['Do you want to overwrite existing parameter settings in the following path?' newline overwriting_path ]);
+        switch overwrite_answer
+            case 'Yes'
+                overwrite_answer=1;
+        end
+    end
+
+    function save_parameters_step_1(~,~)
+        if ~exist(outputpath,'dir')
+            mkdir(outputpath)
+        end
+        
+        if ~exist([outputpath '/parameters.mat'],"file")
+            save([outputpath '/parameters.mat'],'thresholds','sizes','sigmas','zsizes','voxel_size','-v7.3');
+            set(guiapp.advance_button,'visible','on');
+        else
+            overwrite_answer=overwrite_request([outputpath '/parameters.mat']);
+            if overwrite_answer==1
+                save([outputpath '/parameters.mat'],'thresholds','sizes','sigmas','zsizes','voxel_size','-v7.3');
+            end
+        end
+    end
+
+    function save_parameters_step_2(~,~)
+        if ~exist([outputpath '/parameters2.mat'],"file")
+            save([outputpath '/parameters2.mat'],'parameters','-v7.3');
+            set(guiapp.advance_button,'visible','on')
+        else
+            overwrite_answer=overwrite_request([outputpath '/parameters2.mat']);
+            if overwrite_answer==1
+                save([outputpath '/parameters2.mat'],'parameters','-v7.3');
+                data_s=[];
+                data_s=data(:,:,:,parameters.first_frame:parameters.last_frame);
+            end
+        end
+    end
+
+    function save_parameters_step_3(~,~)
+        if ~exist([outputpath '/parameters3.mat'],"file")
+            save([outputpath '/parameters3.mat'],'non_linking_cost','max_gap_closing_distance','max_interframe_distance','length_filter','-v7.3');
+            set(guiapp.advance_button,'visible','on')
+        else
+            overwrite_answer=overwrite_request([outputpath '/parameters3.mat']);
+            if overwrite_answer==1
+                save([outputpath '/parameters3.mat'],'non_linking_cost','max_gap_closing_distance','max_interframe_distance','length_filter','-v7.3');
+            end
+        end
+    end
+
+    function save_parameters_step_4(~,~)
+        if ~exist([outputpath '/parameters4.mat'],"file")
+            save([outputpath '/parameters4.mat'],'max_gap_closing_mutual_distance',"neurons_bv",'-v7.3');
+            set(guiapp.advance_button,'visible','on')
+        else
+            overwrite_answer=overwrite_request([outputpath '/parameters4.mat']);
+            if overwrite_answer==1
+                save([outputpath '/parameters4.mat'],'max_gap_closing_mutual_distance',"neurons_bv",'-v7.3');
+            end
+        end
+    end
+
+    function next_menu(~,~)
+        menu_control=menu_control+1;
+        menu_control(menu_control > 5 )=5;
+        setmenu
+    end
+
+    function previous_menu(~,~)
+        menu_control=menu_control-1;
+        setmenu
+    end
+
+    function setmenu(~,~)
+        switch menu_control
+            case 1
+                delete(guiapp.control_panel.Children)
+                guiapp.tSlider.Value=round(size(data,4)/2);
+                guiapp.tSlider.Max=size(data,4);
+                guiapp.tSlider.SliderStep=[1/(tmax-1) 5/(tmax-1)];
+                update_image=@update_image_t;
+                step1_GUI();
+                guiapp.save_parameters.Callback=@save_parameters_step_1;
+                set(guiapp.goback_button,'visible','off')
+                if exist([outputpath '/parameters.mat'],"file")
+                    set(guiapp.advance_button,'visible','on')
+                end
+                update_spots();
+                resize_text_function();
+
+            case 2
+                delete(guiapp.control_panel.Children)
+                guiapp.tSlider.Value=round(size(data,4)/2);
+                guiapp.tSlider.Max=size(data,4);
+                guiapp.tSlider.SliderStep=[1/(tmax-1) 5/(tmax-1)];
+                update_image=@update_image_t;
+                step2_GUI();
+                guiapp.save_parameters.Callback=@save_parameters_step_2;
+                set(guiapp.goback_button,'visible','on')
+                if exist([outputpath '/parameters2.mat'],"file")
+                    set(guiapp.advance_button,'visible','on')
+                end
+                update_spots();
+                resize_text_function();
+
+            case 3
+                set(guiapp.advance_button,'visible','off')
+                if exist([outputpath '/parameters3.mat'],"file")
+                    set(guiapp.advance_button,'visible','on')
+                    load([outputpath '/parameters3.mat'],'non_linking_cost','max_gap_closing_distance','max_interframe_distance','length_filter');
+                end
+                update_image=@update_image_s;
+                initialize_step_3();
+                delete(guiapp.control_panel.Children)
+                guiapp.tSlider.Value=round(size(data_s,4)/2);
+                t=guiapp.tSlider.Value;
+                guiapp.tSlider.Max=size(data_s,4);
+                guiapp.tSlider.SliderStep=[1/(tmax_local-1) 5/(tmax_local-1)];
+                step3_GUI();
+                guiapp.save_parameters.Callback=@save_parameters_step_3;
+                set(guiapp.goback_button,'visible','on')
+                generate_tracks();
+                update_spots=@update_spots_step_3;
+                update_spots();
+                update_image();
+                resize_text_function();
+
+            case 4
+                delete(guiapp.control_panel.Children)
+                guiapp.tSlider.Value=round(size(data_s,4)/2);
+                guiapp.tSlider.Max=size(data_s,4);
+                guiapp.tSlider.SliderStep=[1/(tmax_local-1) 5/(tmax_local-1)];
+                update_image=@update_image_s;
+                step4_GUI();
+                if isfile([outputpath '/parameters4.mat'])
+                    load([outputpath '/parameters4.mat'],'max_gap_closing_mutual_distance');
+                    guiapp.step(4).max_gap_closing_mutual_distance.String=num2str(max_gap_closing_mutual_distance);
+                    set(guiapp.advance_button,'visible','on')
+                end
+                guiapp.save_parameters.Callback=@save_parameters_step_4;
+                set(guiapp.goback_button,'visible','on')
+                regenerate_tracks();
+                update_spots=@update_spots_step_4;
+                update_spots();
+                resize_text_function();
+
+            case 5
+                disp('Tracking Started')
+                delete(guiapp.control_panel.Children)
+                set(guiapp.goback_button,'visible','off')
+                set(guiapp.advance_button,'visible','off')
+                msgbox('Tracking Started')
+                drawnow
+                tracking_step(data, outputpath);
+        end
+    end
+
+    function step1_GUI
+        % thresholds
+        guiapp.step(1).set_threshold = uicontrol('Parent', guiapp.control_panel, 'Style', 'edit', 'String', num2str(thresholds), ...
+            'Units', 'normalized', 'Position', [0.08 0.2 0.12 0.4], 'Callback', @button_thresholds);
+        guiapp.step(1).set_threshold_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Threshold', ...
+            'Units', 'normalized', 'Position', [0.08 0.6 0.12 0.4], 'Callback', @button_thresholds);
+        % sizes
+        guiapp.step(1).set_size = uicontrol('Parent', guiapp.control_panel, 'Style', 'edit', 'String', num2str(sizes), ...
+            'Units', 'normalized', 'Position', [0.2 0.2 0.12 0.4], 'Callback', @button_sizes);
+        guiapp.step(1).set_size_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Size', ...
+            'Units', 'normalized', 'Position', [0.2 0.6 0.12 0.4], 'Callback', @button_thresholds);
+        % sigmas
+        guiapp.step(1).set_sigma = uicontrol('Parent', guiapp.control_panel, 'Style', 'edit', 'String', num2str(sigmas), ...
+            'Units', 'normalized', 'Position', [0.32 0.2 0.12 0.4], 'Callback', @button_sigmas);
+        guiapp.step(1).set_sigma_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Sigma', ...
+            'Units', 'normalized', 'Position', [0.32 0.6 0.12 0.4]);
+        % number of spots
+        guiapp.spotnum_title = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Spot Num', ...
+            'Units', 'normalized', 'Position', [0.44 0.6 0.12 0.4], 'Callback', @button_thresholds);
+        guiapp.step(1).set_spotnum_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Spot Num', ...
+            'Units', 'normalized', 'Position', [0.44 0.2 0.12 0.4]);
+        guiapp.step(1).show_spots_check = uicontrol('Parent', guiapp.control_panel, 'Style', 'checkbox', 'String', 'spots', ...
+            'Units', 'normalized', 'Position', [0 0 0.09 0.25], 'Value', 1, 'Callback', @check_spots);
+        set(guiapp.advance_button,'visible','off')
+        
+        function button_thresholds(source, ~)
+            thresholds = str2double(source.String);
+            update_spots();
+        end
+
+        function button_sizes(source, ~)
+            sizes = str2double(source.String);
+            update_spots();
+        end
+
+        function button_sigmas(source, ~)
+            sigmas = str2double(source.String);
+            suggested_size = 2 * ceil(3 * sigmas) + 1;
+            guiapp.step(1).set_size.String = num2str(suggested_size);
+            sizes = suggested_size;
+            update_spots();
+        end
+
+        function check_spots(~,~)
+            update_spots();
+        end
+        
+        update_spots=@update_spots_step_1_and_2;
+    end
+
+    function step2_GUI
+        guiapp.step(2).first_frame = uicontrol('parent', guiapp.control_panel,'Style','pushbutton','Units', 'normalized','Position',[0.08 0.2 0.12 0.4],'String','Set Start','Callback',@setStartFrame);
+        guiapp.step(2).last_frame = uicontrol('parent', guiapp.control_panel,'Style','pushbutton','Units', 'normalized','Position',[0.2 0.2 0.12 0.4],'String','Set Stop','Callback',@setEndFrame);
+        guiapp.step(2).first_frame_texts = uicontrol('parent', guiapp.control_panel,'Style','text','string',['Start = ' num2str(parameters.first_frame)],'Units', 'normalized','Position',[0.08 0.6 0.12 0.4]);
+        guiapp.step(2).last_frame_texts = uicontrol('parent', guiapp.control_panel,'Style','text','string',['Stop = ' num2str(parameters.last_frame)],'Units', 'normalized','Position',[0.2 0.6 0.12 0.4]);
+        
+        % number of spots
+        guiapp.step(2).spotnum_title = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Spot Num', ...
+            'Units', 'normalized', 'Position', [0.44 0.6 0.12 0.4], 'Callback', @button_thresholds);
+        guiapp.step(1).set_spotnum_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', '', ...
+            'Units', 'normalized', 'Position', [0.44 0.2 0.12 0.4], 'Callback', @button_thresholds);
+        set(guiapp.advance_button,'visible','off')
+        guiapp.step(1).show_spots_check = uicontrol('Parent', guiapp.control_panel, 'Style', 'checkbox', 'String', 'spots', ...
+            'Units', 'normalized', 'Position', [0 0 0.09 0.25], 'Value', 1, 'Callback', @check_spots);
+
+        function setStartFrame(~,~)
+            parameters.first_frame=t;
+            guiapp.step(2).first_frame_texts.String=['Start = ' num2str(parameters.first_frame)];
+        end
+
+        function setEndFrame(~,~)
+            parameters.last_frame=t;
+            guiapp.step(2).last_frame_texts.String=['Stop = ' num2str(parameters.last_frame)];
+        end
+        
+        function check_spots(~,~)
+            update_spots();
+        end
+
+        update_spots=@update_spots_step_1_and_2;
+    end
+
+    function step3_GUI
+        guiapp.step(3).non_linking_cost = uicontrol('parent', guiapp.control_panel,'Style','edit','String',num2str(non_linking_cost),'units','normalized','Position',[0.08 0.2 0.12 0.4],'Callback',@non_linking_cost_btn);
+        guiapp.step(3).max_gap_closing_distance = uicontrol('parent', guiapp.control_panel,'Style','edit','String',num2str(max_gap_closing_distance),'units','normalized','Position',[0.2 0.2 0.12 0.4],'Callback',@max_gap_closing_distance_btn);
+        guiapp.step(3).max_interframe_distance = uicontrol('parent', guiapp.control_panel,'Style','edit','String',num2str(max_interframe_distance),'units','normalized','Position',[0.32 0.2 0.12 0.4],'Callback',@max_interframe_distance_btn);
+        guiapp.step(3).length_filter = uicontrol('parent', guiapp.control_panel,'Style','edit','String',num2str(length_filter),'units','normalized','Position',[0.44 0.2 0.12 0.4],'Callback',@length_filter_btn);        
+        guiapp.step(3).check_button = uicontrol('parent', guiapp.control_panel,'Style','pushbutton','String','Check','units','normalized','Position',[0.84 0.2 0.12 0.4],'Callback',@generate_tracks);
+
+        guiapp.step(3).text_non_linking_cost = uicontrol('parent', guiapp.control_panel,'Style','text','string',['Non linking cost = ' num2str(non_linking_cost)],'units','normalized','Position',[0.08 0.6 0.12 0.4]);
+        guiapp.step(3).text_max_gap_closing_distance = uicontrol('parent', guiapp.control_panel,'Style','text','string',['Gap closing dist = ' num2str(max_gap_closing_distance)],'units','normalized','Position',[0.2 0.6 0.12 0.4]);
+        guiapp.step(3).text_max_interframe_distance = uicontrol('parent', guiapp.control_panel,'Style','text','string',['Inter-frame dist = ' num2str(max_interframe_distance)],'units','normalized','Position',[0.32 0.6 0.12 0.4]);
+        guiapp.step(3).text_length_filter = uicontrol('parent', guiapp.control_panel,'Style','text','string',['Length filter = ' num2str(length_filter)],'units','normalized','Position',[0.44 0.6 0.12 0.4]);
+
+        guiapp.step(3).spotnum_title = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Spot Num', 'Units', 'normalized', 'Position', [0.56 0.6 0.12 0.4]);
+        guiapp.step(3).set_spotnum_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', '', 'Units', 'normalized', 'Position', [0.56 0.2 0.12 0.4]);
+        guiapp.step(3).tracknum_title = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Track Num', 'Units', 'normalized', 'Position', [0.68 0.6 0.12 0.4]);
+        guiapp.step(3).set_tracknum_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', '', 'Units', 'normalized', 'Position', [0.68 0.2 0.12 0.4]);
+
+        function length_filter_btn(~,~)
+            length_filter=str2double(guiapp.step(3).length_filter.String);
+            guiapp.step(3).text_length_filter.String=['Length filter = ' num2str(length_filter)];
+        end
+        function max_interframe_distance_btn(~,~)
+            max_interframe_distance=str2double(guiapp.step(3).max_interframe_distance.String);
+            guiapp.step(3).text_max_interframe_distance.String=['Inter-frame dist = ' num2str(max_interframe_distance)];
+        end
+        function max_gap_closing_distance_btn(~,~)
+            max_gap_closing_distance=str2double(guiapp.step(3).max_gap_closing_distance.String);
+            guiapp.step(3).text_max_gap_closing_distance.String=['Gap closing dist = ' num2str(max_gap_closing_distance)];
+        end
+        function non_linking_cost_btn(~,~)
+            non_linking_cost=str2double(guiapp.step(3).non_linking_cost.String);
+            guiapp.step(3).text_non_linking_cost.String=['Non linking cost = ' num2str(non_linking_cost)];
+        end
+    end
+
+    function step4_GUI
+        guiapp.step(4).max_gap_closing_mutual_distance = uicontrol('parent', guiapp.control_panel,'Style','edit','String',num2str(max_gap_closing_mutual_distance),'units','normalized','Position',[0.08 0.2 0.12 0.4],'Callback',@max_gap_closing_mutual_distance_btn);
+        guiapp.step(4).check_button = uicontrol('parent', guiapp.control_panel,'Style','pushbutton','String','Check','units','normalized','Position',[0.84 0.2 0.12 0.4],'Callback',@regenerate_tracks);
+        
+        guiapp.step(4).texts_max_gap_closing_mutual_distance = uicontrol('parent', guiapp.control_panel,'Style','text','string',['gap closing dist = ' num2str(max_gap_closing_mutual_distance)],'Units', 'normalized','Position',[0.08 0.6 0.12 0.4]);
+        
+        guiapp.step(4).spotnum_title = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Spot Num', 'Units', 'normalized', 'Position', [0.44 0.6 0.12 0.4]);
+        guiapp.step(4).set_spotnum_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', '', 'Units', 'normalized', 'Position', [0.44 0.2 0.12 0.4]);
+        guiapp.step(4).tracknum_title = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', 'Track Num', 'Units', 'normalized', 'Position', [0.68 0.6 0.12 0.4]);
+        guiapp.step(4).set_tracknum_text = uicontrol('Parent', guiapp.control_panel, 'Style', 'text', 'String', '', 'Units', 'normalized', 'Position', [0.68 0.2 0.12 0.4]);
+
+
+        set(guiapp.advance_button,'visible','off')
+
+        update_spots=@update_spots_step_4;
+
+        function max_gap_closing_mutual_distance_btn(~,~)
+            max_gap_closing_mutual_distance=str2double(get(guiapp.step(4).max_gap_closing_mutual_distance,'String'));
+            guiapp.step(4).texts_max_gap_closing_mutual_distance.String=['gap closing dist = ' num2str(max_gap_closing_mutual_distance)];
+        end
+    end
+
+    
+    % Functions to process data
+
+    function initialize_step_3(~,~)
+        thresholds_local=thresholds;
+        sigmas_local=sigmas;
+        sizes_local=sizes;
+        zsizes_local=zsizes;
+        data_s=[];
+        data_s=data(:,:,:,parameters.first_frame:parameters.last_frame);
+        parameters_local=parameters;
+        tmax_local=size(data_s,4);
+
+        if ~isfile([outputpath '/spots_s.mat'])
+            short_video_spots;
+            save([outputpath '/spots_s.mat'],'spots_s','sizes_local','thresholds_local','sigmas_local','zsizes_local','parameters_local');
+        else
+            previous_settings=load([outputpath '/spots_s.mat']);
+            if previous_settings.thresholds_local~=thresholds || ...
+                    previous_settings.sigmas_local~=sigmas || ...
+                    previous_settings.sizes_local~=sizes || ...
+                    previous_settings.zsizes_local~=zsizes || ...
+                    previous_settings.parameters_local.first_frame~=parameters.first_frame ||...
+                    previous_settings.parameters_local.last_frame~=parameters.last_frame
+
+                if overwrite_request([outputpath '/spots_s.mat'])==1
+                    short_video_spots;
+                    save([outputpath '/spots_s.mat'],'spots_s','sizes_local','thresholds_local','sigmas_local','zsizes_local','parameters_local');
+                else
+                    load_spots_from_file
+                end
+            else
+                load_spots_from_file
+            end
+        end
+
+        function load_spots_from_file
+            disp('Loading from file');
+            spots_s=previous_settings.spots_s;
+            thresholds_local=previous_settings.thresholds_local;
+            sigmas_local=previous_settings.sigmas_local;
+            sizes_local=previous_settings.sizes_local;
+            zsizes_local=previous_settings.zsizes_local;
+            parameters.first_frame=previous_settings.parameters_local.first_frame;
+            parameters.last_frame=previous_settings.parameters_local.last_frame;
+            data_s=[];
+            data_s=data(:,:,:,parameters.first_frame:parameters.last_frame);
+
+        end
+
+        function short_video_spots
+            tic
+            % finding spots -----------
+            disp('Step 1.1: finding spots')
+            spots_s{1}=[];
+            h = waitbar(0, 'Finding spots ...');
+            for framenum_id=1:tmax_local
+                % spots_s{framenum_id}=bd3d_local(data_s(:,:,:,framenum_id),sizes_local,thresholds_local,sigmas_local,zsizes_local);
+                spots_s{framenum_id}=bd3d(data_s(:,:,:,framenum_id),thresholds,sizes,zsizes,sigmas,voxel_size);
+                waitbar(framenum_id/tmax_local,h);
+            end
+            close(h)
+            elapsed_time_step_1=toc;
+            disp(['computation time: ' num2str(elapsed_time_step_1)]);
+        end
+
+    end
+
+    function generate_tracks(~,~)
+        non_linking_cost = str2double(guiapp.step(3).non_linking_cost.String);
+        max_gap_closing_distance = str2double(guiapp.step(3).max_gap_closing_distance.String);
+        max_interframe_distance = str2double(guiapp.step(3).max_interframe_distance.String);
+        length_filter = str2double(guiapp.step(3).length_filter.String);
+        tmax_local=size(data_s,4);
+
+        % LAP linker
         disp('Step 1.2: global minimum of interframe spatio-temporal spot proximity');
         h = waitbar(0, 'Interframe spot linking ...');
+        spot_links_s{tmax_local}=[];
         tic
-        % LAP linker
-        for t=2:maxtime_s
-            spot_links_s{t}=LAP_linker_local_s(t,non_linking_cost,A_time_local,xy_pixel_size_local,z_pixel_size_local);
-            waitbar(t/maxtime_s,h);
+        for t_id=2:tmax_local
+            spot_links_s{t_id}=LAP_linker_local_s(t_id,non_linking_cost,spots_s,voxel_size(1),voxel_size(3));
+            waitbar(t_id/tmax_local,h);
         end
         close(h)
-        elapsed_time_step_2=toc;
+        toc
+
         % building segments lists
         disp('Step 1.3: building initial segments');
-        clear segmentlists_s segmentlists_time_s
         [segmentlists_time_s,segmentlists_s]=build_links(spot_links_s);
+
         % LAP tracking: gap closing
         disp('Step 1.4: gap closing');
-        clear segment_links
-        segment_links_s=gap_closer_s(segmentlists_time_s,segmentlists_s,max_interframe_distance,max_gap_closing_distance,A_time_s);
+        segment_links_s=gap_closer_s(segmentlists_time_s,segmentlists_s,max_interframe_distance,max_gap_closing_distance,spots_s,voxel_size);
+
         % building track list
         tracklist_s=build_tracks(segment_links_s);
+
         % filter short linking lists
-        disp('trace length filter');
-        filtered_exptracelist_s=merge_and_filter_short_links_s(tracklist_s,segmentlists_time_s,segmentlists_s,length_filter);
-        %
-        clear global neurons_tmp_unsorted_s colormap_s
-        global colormap_s
-        global neurons_tmp_unsorted_s
-        try
-            neurons_tmp_unsorted_s(numel(filtered_exptracelist_s)).coords=[];
-        end
-        xy_offset=-floor(sizes/2)+1;
-        z_offset=-floor(zsizes/2)+1;
-        colormap_s=distinguishable_colors(numel(filtered_exptracelist_s));
+        disp('Step 1.5: trace length filter');
+        filtered_exptracelist_s=merge_and_filter_short_links_s(tracklist_s,segmentlists_time_s,segmentlists_s,length_filter,tmax_local);
+
+        % store tracks
+        coords_colors=different_colors(numel(filtered_exptracelist_s));
+        coords_t=NaN.*ones(tmax_local,4,numel(filtered_exptracelist_s));
         for i=1:numel(filtered_exptracelist_s)
-            neurons_tmp_unsorted_s(i).coords=NaN.*ones(maxtime_s,4);
-        end
-        try
-            delete(test_s);
-        end
-        % -------------------------------------------------------------------------
-        try
-            structfun(@delete,guiapp);
-            delete(text_non_linking_cost);
-            delete(text_max_gap_closing_distance);
-            delete(text_max_interframe_distance);
-            delete(text_length_filter);
-        end
-        check=1;
-        shown_fig.CData=I;
-        % slider range definition
-        maxsize=25; minsize=2; sizerange=maxsize-minsize;
-        minsigma=3; maxsigma=150; sigmarange=maxsigma-minsigma;
-        mintime=1; maxtime_s=DURATA_TOTALE_s; timerange=maxtime_s-mintime;
-        minslice=1; maxslice=number_of_planes; slicerange=maxslice-minslice; slicerange(slicerange==0)=1;
-        disp('Tracking parameters selection...')
-        guiapp.sld_timepoint= uicontrol('parent',f,'Style','slider','Value',framenum,'min',mintime,'max',maxtime_s,'SliderStep',[1 5]./timerange,'Units','normalized','Position',[0.05 0.1525 0.9 0.025]);
-        guiapp.sld_slice= uicontrol('parent',f,'Style','slider','Value',slice,'min',minslice,'max',maxslice,'SliderStep',[1 5]./slicerange,'Units','normalized','Position',[0.05 0.1275 0.9 0.025]);
-        text_timepoint = uicontrol('parent',f,'Style','text','string',['framenum = ' num2str(framenum)],'Position',[650+dx_texts 35 150 25]);
-        text_slice = uicontrol('parent',f,'Style','text','string',['slice = ' num2str(slice)],'Position',[650+dx_texts 10 150 25]);
-        text_spot_num = uicontrol('parent',f,'Style','text','string',['spot number = ' num2str(0)],'Position',[650+dx_texts 60 150 25]);
-        set(guiapp.sld_timepoint,'Callback','global framenum; framenum=round(guiapp.sld_timepoint.Value); sliderMoving_tracks_s_2;');
-        set(guiapp.sld_slice,'Callback','global slice; slice=guiapp.sld_slice.Value; sliderMoving_tracks_s_2;');
-        guiapp.non_linking_cost = uicontrol('parent',f,'Style','edit','String',num2str(non_linking_cost),'Position',[50 20 150 25]);
-        guiapp.max_gap_closing_distance = uicontrol('parent',f,'Style','edit','String',num2str(max_gap_closing_distance),'Position',[250 20 150 25]);
-        guiapp.max_interframe_distance = uicontrol('parent',f,'Style','edit','String',num2str(max_interframe_distance),'Position',[450 20 150 25]);
-        guiapp.length_filter = uicontrol('parent',f,'Style','edit','String',num2str(length_filter),'Position',[650 20 150 25]);
-        text_non_linking_cost = uicontrol('parent',f,'Style','text','string',['non linking cost = ' num2str(non_linking_cost)],'Position',[50 45 150 25]);
-        text_max_gap_closing_distance = uicontrol('parent',f,'Style','text','string',['max gap closing distance = ' num2str(max_gap_closing_distance)],'Position',[250 45 150 25]);
-        text_max_interframe_distance = uicontrol('parent',f,'Style','text','string',['max interframe distance = ' num2str(max_interframe_distance)],'Position',[450 45 150 25]);
-        text_length_filter = uicontrol('parent',f,'Style','text','string',['length filter = ' num2str(length_filter)],'Position',[650 45 150 25]);
-        set(guiapp.non_linking_cost,'Callback','global non_linking_cost; non_linking_cost=str2num(guiapp.non_linking_cost.String); set(text_non_linking_cost,"string",["non linking cost = " (guiapp.non_linking_cost.String)]);');
-        set(guiapp.max_gap_closing_distance,'Callback','global max_gap_closing_distance; max_gap_closing_distance=str2num(guiapp.max_gap_closing_distance.String); set(text_max_gap_closing_distance,"string",["max gap closing distance = " (guiapp.max_gap_closing_distance.String)]);');
-        set(guiapp.max_interframe_distance,'Callback','global max_interframe_distance; max_interframe_distance=str2num(guiapp.max_interframe_distance.String); set(text_max_interframe_distance,"string",["max interframe distance = " (guiapp.max_interframe_distance.String)]);');
-        set(guiapp.length_filter,'Callback','global length_filter; length_filter=str2num(guiapp.length_filter.String); set(text_length_filter,"string",["length filter = " (guiapp.length_filter.String)]);');
-        guiapp.bttn_go= uicontrol('parent',f,'Style','pushbutton','String','GO!','Value',0,'Units','normalized','Position',[0.95 0.0475 0.04 0.05],'Callback','go=1;');
-        guiapp.bttn_check= uicontrol('parent',f,'Style','pushbutton','String','Check','Value',0,'Units','normalized','Position',[0.85 0.0475 0.04 0.05],'Callback','check=0;');
-        go=0;
-        colormap('gray')
-        % -------------------------------------------------------------------------
-        for i=1:numel(filtered_exptracelist_s)
-            for t=1:maxtime_s
-                if ~isnan(filtered_exptracelist_s{i}(t)) && filtered_exptracelist_s{i}(t)~=0
-                    %
-                    id=filtered_exptracelist_s{i}(t);
-                    sub_pixel_localization=cell2mat({A_time_s{1,t}(id).center}.');
-                    sub_pixel_localization=sub_pixel_localization;
-                    neurons_tmp_unsorted_s(i).coords(t,:)=single([sub_pixel_localization, t]);
-                    id=filtered_exptracelist_s{i}(t);
-                    A_time_s{1,t}(id).color=colormap_s(i,:);
+            for t_id=1:tmax_local
+                if ~isnan(filtered_exptracelist_s{i}(t_id)) && filtered_exptracelist_s{i}(t_id)~=0
+                    id=filtered_exptracelist_s{i}(t_id);
+                    sub_pixel_localization=spots_s{t_id}(id,1:3);
+                    coords_t(t_id,:,i)=[sub_pixel_localization, t_id];
                 end
             end
-            hold on
-            test_s(i)=plot(neurons_tmp_unsorted_s(i).coords(:,2),neurons_tmp_unsorted_s(i).coords(:,1),'color',colormap_s(i,:));
         end
-        axis equal
-        while check && go==0
-            drawnow
-        end
+
+        % update plots and text
+        % colororder(guiapp.img_ax,different_colors(size(coords_t,3)));
+        hold(guiapp.img_ax,'on');
+        delete(guiapp.track_plot);
+        guiapp.track_plot=plot(guiapp.img_ax,squeeze(coords_t(:,2,:)),squeeze(coords_t(:,1,:)),'Color','yellow');
+
+        zmarker=abs(squeeze(coords_t(t,3,:))-z);
+
+        set(guiapp.track_plot(zmarker<2),'LineWidth',2);
+        set(guiapp.track_plot(zmarker<1),'LineWidth',4);
+
+        set(guiapp.step(3).set_tracknum_text,'String',size(coords_t,3));
     end
-    save([outputpath '\parameters3.mat'],'max_gap_closing_distance','max_interframe_distance','non_linking_cost','neurons_tmp_unsorted_s','-v7.3');
-else
-    load([outputpath '\parameters3.mat']);
-end
-try
-    structfun(@delete,guiapp);
-    delete(text_non_linking_cost);
-    delete(text_max_gap_closing_distance);
-    delete(text_max_interframe_distance);
-    delete(text_length_filter);
-end
 
-%% Step 2.1: creating distance matrix of subvideo tracks
+    function regenerate_tracks(~,~)
+        max_gap_closing_mutual_distance=str2double(get(guiapp.step(4).max_gap_closing_mutual_distance,'String'));
+        guiapp.step(4).texts_max_gap_closing_mutual_distance.String=['gap closing dist = ' num2str(max_gap_closing_mutual_distance)];
 
-check=0;
-go=0;
-try
-    clear global short_neurons_tmp_unsorted_s
-end
-global neurons_bv
-global short_neurons_tmp_unsorted_s
-for i=1:numel(neurons_tmp_unsorted_s)
-    x_vector=neurons_tmp_unsorted_s(i).coords(:,1);
-    non_nan_times=find(~isnan(x_vector));
-    short_neurons_tmp_unsorted_s(i).coords(:,:)=neurons_tmp_unsorted_s(i).coords(non_nan_times,:);
-end
-clear distmatrix_s
-distmatrix_s=makeDistMatrix_s(neurons_tmp_unsorted_s,maxtime_s);
-
-%% Distance matrix parameter selection in subvideo
-try
-    delete(guiapp.non_linking_cost)
-    delete(guiapp.max_gap_closing_distance)
-    delete(guiapp.max_interframe_distance)
-    delete(text_non_linking_cost)
-    delete(text_max_gap_closing_distance)
-    delete(text_max_interframe_distance)
-    delete(text_length_filter)
-end
-
-max_gap_closing_mutual_distance=4;
-global go
-global check
-global display_matrix
-go=0;
-check=0;
-framenum(framenum>DURATA_TOTALE_s)=DURATA_TOTALE_s;
-if ~isfile([outputpath '\parameters4.mat'])
-    while check==0 && go==0 % qui inserire il salvataggio dei dati
-        check=1;
-        try
-            figure(f)
-        catch
-            f=figure('Units','normalized','Position',[0.125 0.125 0.75 0.75]);
-        end
-        % Step 2.2: gap closing based on mutual distance
-        % parameters
-        mutual_position_based_links=[]; reconstructed_links=[];
-        mutual_position_based_links=get_mpbl(distmatrix_s,short_neurons_tmp_unsorted_s,maxtime_s,xy_pixel_size,z_pixel_size,max_gap_closing_mutual_distance);
+        % Step 2.1: calculating mutual distance
+        distmatrix_s=makeDistMatrix_s(coords_t);
+        % Step 2.2: gap closing based on mutual distance parameters
+        mutual_position_based_links=get_mpbl(distmatrix_s,coords_t,tmax_local,voxel_size(1),voxel_size(3),max_gap_closing_mutual_distance);
         reconstructed_links=reconstruct_links(mutual_position_based_links,max_gap_closing_mutual_distance);
-        neurons_bv=create_neurons_bv(short_neurons_tmp_unsorted_s,reconstructed_links);
+        neurons_bv=create_neurons_bv(coords_t,reconstructed_links);
+        coords_t2=nan(size(data_s,4),4,numel(neurons_bv));
+        for i=1:numel(neurons_bv)
+            valid_times=neurons_bv(i).coords(:,4);
+            coords_t2(valid_times,:,i)=neurons_bv(i).coords;
+        end
 
-        try
-            shown_fig.CData=I;
-        catch
-            global shown_fig
-            global ax
-            shown_fig=imagesc(I);
-            ax=gca;
-            axis equal
-            axis off
-        end
-        % slider range definition
-        maxsize=25; minsize=2; sizerange=maxsize-minsize;
-        minsigma=3; maxsigma=150; sigmarange=maxsigma-minsigma;
-        mintime=1; timerange=maxtime_s-mintime;
-        minslice=1; maxslice=number_of_planes; slicerange=maxslice-minslice; slicerange(slicerange==0)=1;
-        disp('Tracking parameters selection...')
-        guiapp.sld_timepoint= uicontrol('parent',f,'Style','slider','Value',framenum,'min',mintime,'max',maxtime_s,'SliderStep',[1 5]./timerange,'Units','normalized','Position',[0.05 0.1525 0.9 0.025]);
-        guiapp.sld_slice= uicontrol('parent',f,'Style','slider','Value',slice,'min',minslice,'max',maxslice,'SliderStep',[1 5]./slicerange,'Units','normalized','Position',[0.05 0.1275 0.9 0.025]);
-        text_timepoint = uicontrol('parent',f,'Style','text','string',['framenum = ' num2str(framenum)],'Position',[650 35 150 25]);
-        text_slice = uicontrol('parent',f,'Style','text','string',['slice = ' num2str(slice)],'Position',[650 10 150 25]);
-        text_spot_num = uicontrol('parent',f,'Style','text','string',['spot number = ' num2str(0)],'Position',[650 60 150 25]);
-        set(guiapp.sld_timepoint,'Callback','global framenum; framenum=round(guiapp.sld_timepoint.Value); sliderMoving_tracks_s_3;');
-        set(guiapp.sld_slice,'Callback','global slice; slice=guiapp.sld_slice.Value; sliderMoving_tracks_s_3;');
-        guiapp.max_gap_closing_mutual_distance = uicontrol('parent',f,'Style','edit','String',num2str(max_gap_closing_mutual_distance),'Position',[150 20 150 25]);
-        text_max_gap_closing_mutual_distance = uicontrol('parent',f,'Style','text','string',['max gap closing mutual distance = ' num2str(max_gap_closing_mutual_distance)],'Position',[150 55 150 25]);
-        set(guiapp.max_gap_closing_mutual_distance,'Callback','global max_gap_closing_mutual_distance; max_gap_closing_mutual_distance=str2num(guiapp.max_gap_closing_mutual_distance.String); set(text_max_gap_closing_mutual_distance,"string",["max gap closing mutual distance = " (guiapp.max_gap_closing_mutual_distance.String)]);');
-        guiapp.bttn_go= uicontrol('parent',f,'Style','pushbutton','String','GO!','Units','normalized','Position',[0.95 0.0475 0.04 0.05],'Callback','global go; go=1;');
-        guiapp.bttn_check= uicontrol('parent',f,'Style','pushbutton','String','Check','Value',0,'Units','normalized','Position',[0.85 0.0475 0.04 0.05],'Callback','global check; check=0;');
-        colormap('gray')
-        colormap_s=distinguishable_colors(numel(neurons_bv));
-        figure(f)
-        try
-            delete(plotted_tracks);
-        end
-        plotted_tracks=[];
-        hold on
-        for i=1:numel(neurons_bv)
-            plotted_tracks(i)=plot(neurons_bv(i).coords(:,2),neurons_bv(i).coords(:,1),'color',colormap_s(i,:));
-            hold on
-        end
-        display_matrix=[];
-        display_matrix=NaN.*ones(numel(neurons_bv),maxtime_s,3);
-        for i=1:numel(neurons_bv)
-            display_matrix(i,neurons_bv(i).coords(:,4),1:3)=neurons_bv(i).coords(:,1:3);
-        end
-        sliderMoving_tracks_s_3
+        % update plots and text
+        coords_colors_2=different_colors(size(coords_t2,3));
+
+        hold(guiapp.img_ax,'on');
+        delete(guiapp.track_plot);
+        guiapp.track_plot=plot(guiapp.img_ax,squeeze(coords_t2(:,2,:)),squeeze(coords_t2(:,1,:)),'Color','yellow');
+
+        zmarker=abs(squeeze(coords_t2(t,3,:))-z);
+
+        set(guiapp.track_plot(zmarker<2),'LineWidth',2);
+        set(guiapp.track_plot(zmarker<1),'LineWidth',4);
+
+        set(guiapp.step(4).set_tracknum_text,'String',size(coords_t2,3));
     end
-    save([outputpath '\parameters4.mat'],'thresholds','sizes','sigmas','zsizes','time_processing','max_gap_closing_mutual_distance','-v7.3');
-else
-    load([outputpath '\parameters4.mat']);
-end
-close all
 
+end
